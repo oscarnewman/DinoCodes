@@ -77,23 +77,29 @@
 
 \section*{Definitions}
 
-\textbf{Team name: \emph{HERE PLEASE}}
+\textbf{Team name: Dino QR}
 
-\textbf{Team members: \emph{HERE PLEASE}}\\
+\textbf{Team members: Ben Gershuny, Isaac Hilton-VanOsdall, Oscar Newman}\\
 \emph{Note:} Once one person uploads the report to Gradescope, please add all other team members to the submission within the Gradescope interface (top right on your submission).
 
-\textbf{TA name: \emph{HERE PLEASE}}
+\textbf{TA name: Yang Jiao}
 
 \section*{Project}
 \begin{itemize}
-  \item What is your project idea?
-  \item What data have you collected?
-  \item What software have you built or used?
-  \item What has each team member contributed thus far?
-  \item What intermediate results have you generated?
-  \item What problems have you faced or still have to consider?
-  \item Is there anything that we can do to help? E.G., resources, equipment.
-  \item 2 pages max; feel free to include any media, references, etc.
+  \item \emph{What is your project idea?} \\ 
+  Our idea is to build a system that completely revamps the way QR codes work. QR codes are ubiquitous now, and addressed some of the pitfalls of traditional bar codes in their capacity to hold more data with many levels of redundancy, which allows them to be decoded very quickly and reliably. The problem we see with QR codes, though, is that they are static. This means that they can’t be trusted to hold any kind of sensitive, time-dependent information, because once a QR code is generated it can be easily replicated without any means of identification or validation of who exactly is displaying it. One good example of this issue is for QR codes on tickets to events (or even boarding passes on planes), one could easily share a screenshot or copy of their QR code to others without the recipient having any idea that an unexpected person is using the code. We want to build a system that enables QR codes to be secure by dynamically encoding them with data that would be intrinsically time-stamped and ideally cryptographically signed, so that a scanner of the code can trust that the code is both up to date and coming from a trusted, known entity. The way we picture doing this is to have a system that displays a live-generated animated QR code that can encode time-stamped, cryptographically signed dynamic data, and a scanner that can read, verify, and decode this dynamic QR. We envision trying to implement this system for deployment on mobile devices, most likely with SwiftUI to start with, and then hopefully developing a JavaScript library for a web interface. While this is a fairly broad-scoped software project, the bulk of the work will be developing the computer vision side of generating these dynamic QR codes and then decoding them from camera image inputs.
+  \item \emph{What data have you collected?} \\
+  We have not collected any data because we will be generating QR codes to test our implementation. To test our system, we will come up with a variety of test scenarios (i.e. devices) and information packets to encode.
+  \item \emph{What software have you built or used?} \\
+  We built an early proof-of-concept prototype of rapid-sequence QR codes with embedded timestamps last year. It featured a Javascript web app generating encoded QR codes at 10Hz and the native QR recognition library on iOS in Swift. It was easily able to parse the QR codes even in less than ideal conditions. We are hopeful that our custom implementation will be able to achieve similar results.
+  \item \emph{What has each team member contributed thus far?} \\
+  The three of us have been looking into resources for barcodes, QR codes, and other custom 2D code algorithms, and Oscar worked on the preliminary testing on iOS.
+  \item \emph{What intermediate results have you generated?} \\
+  The results we have generated thus far are the results from the preliminary test on iOS, detailed in the section about what software we have built or used.
+  \item \emph{What problems have you faced or still have to consider?} \\
+  We still have to figure out the implementation details of a QR code scanner using image recognition techniques. We have a general idea both of the sepc of QR and the overall methods needed to do image detection, but the real implementation will likely be challenging.
+  \item \emph{Is there anything that we can do to help? E.G., resources, equipment.}
+  If anyone has information on how to build custom 2D (non-QR) codes (i.e. Snap Codes, Messenger Codes, that cool Apple Watch one, etc), we’d love to learn more. Our reach goal is to build a custom scannable code (beyond QR).
 \end{itemize}
 
 
