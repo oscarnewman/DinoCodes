@@ -11,6 +11,10 @@ pylint = "*"
 [packages]
 numpy = "*"
 opencv-python = "*"
+pyqrcode = "*"
+pypng = "*"
+pillow = "*"
+pyzbar = "*"
 
 [requires]
 python_version = "3.7"
