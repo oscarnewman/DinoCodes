@@ -15,6 +15,7 @@ pyqrcode = "*"
 pypng = "*"
 pillow = "*"
 pyzbar = "*"
+matplotlib = "*"
 
 [requires]
 python_version = "3.7"
