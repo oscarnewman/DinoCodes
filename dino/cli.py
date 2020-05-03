@@ -50,8 +50,8 @@ def show_webcam(mirror=False):
 
 
 def run():
-    # im = Image.open("qrtests/qr1.png")
-    im = Image.open("qrtests/printed.jpg")
+    im = Image.open("qrtests/qr1.png")
+    # im = Image.open("qrtests/txsm.jpg")
     # im = Image.open("qrtests/3d.jpg")
     image = np.array(im)
     # image = cv2.imread("qrtests/v1.png")

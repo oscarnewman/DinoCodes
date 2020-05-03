@@ -16,6 +16,7 @@ pypng = "*"
 pillow = "*"
 pyzbar = "*"
 matplotlib = "*"
+segno = "*"
 
 [requires]
 python_version = "3.7"
