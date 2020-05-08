@@ -1,0 +1,62 @@
+\documentclass[10pt,twocolumn,letterpaper]{article}
+
+\usepackage{cvpr}
+\usepackage{times}
+\usepackage{epsfig}
+\usepackage{graphicx}
+\usepackage{amsmath}
+\usepackage{amssymb}
+
+% Include other packages here, before hyperref.
+
+% If you comment hyperref and then uncomment it, you should delete
+% egpaper.aux before re-running latex.  (Or just hit 'q' on the first latex
+% run, let it finish, and you should be clear).
+\usepackage[breaklinks=true,bookmarks=false]{hyperref}
+
+\cvprfinalcopy % *** Uncomment this line for the final submission
+
+\def\cvprPaperID{****} % *** Enter the CVPR Paper ID here
+\def\httilde{\mbox{\tt\raisebox{-.5ex}{\symbol{126}}}}
+
+% Pages are numbered in submission mode, and unnumbered in camera-ready
+% \ifcvprfinal\pagestyle{empty}\fi
+\setcounter{page}{1}
+\begin{document}
+
+%%%%%%%%% TITLE
+\title{DinoQR: Time-Secured, Realtime QR Codes}
+
+\author{
+Ben Gershuny, Isaac Hilton-VanOsdall, Oscar Newman\\
+Brown University\\
+{\tt\small \{benjamin\_gershuny,isaac\_hilton-vanosdall,oscar\_newman\}@brown.edu}
+% For a paper whose authors are all at the same institution,
+% omit the following lines up until the closing ``}''.
+% Additional authors and addresses can be added with ``\and'',
+% just like the second author.
+% To save space, use either the email address or home page, not both
+}
+
+\maketitle
+%\thispagestyle{empty}
+
+%%%%%%%%% ABSTRACT
+\begin{abstract}
+   We sought to apply the existing an near-universally available technology of QR codes to more secure use-cases requiring the verification of location, identify, or time. We developed a protocol for real-time animated QR code generation, scanning, and verification to provide these qualities. With the hope of expanding the technology past strict QR codes, we implemented a custom QR encoding, decoding, and scanning pipeline in Python and OpenCV2. This was functional but slow due to the limitations of Python. We also built a live server, client, and scanner demo using existing QR Code libraries as a proof of concept of the protocol. Current results are promising and we hope to combine both efforts by rewriting our QR pipeline in a low-level language.
+\end{abstract}
+
+%%%%%%%%% BODY TEXT
+\section{Introduction}
+Countless daily actions require verifying time, identity, or location. And many organizations, businesses, and services rely on that ability. Unfortunately, solving that problem typically requires specialized hardware (like ID cards, NFC, RFID, etc.) and software. While this is fine in certain settings, there are many that would benefit from a universally available approach. For example, venues could eliminate price-gouging secondhand markets for tickets by tying ticketing to identity and preventing transfers outside of their system. Likewise, a technology like this could be used to verify that home healthcare providers for the elderly visit their pateients when they say they do, and prevent fraud (this type of verification is now a legal requirement healthcare providers are struggling to meet). It could even be used to securely exchange secrets with trusted but potentially numerous third parties.
+
+QR codes are a promising solution to this problem. They are universally avaialble. They can be both generated and scanned by anyone with a camera-enabled smartphone. Using modern web technology, there may not even be a need for users to download an app to scan and generate QR codes.
+
+Unfortunately, QR codes as they exist are insecure for these applications. They can be copied, shared, replicated, and scanned by anyone at any time. They simply act as a static identifier or a shorthand for typing in some sort of code.
+
+\subsection{Problem Statement}
+In this work, we seek to create a secure, universally available, and flexible QR code pipline and protocol to provide the verificaiton of location, identity, and time to the scanner. We will achieve this through a custom encoding protocol which provides security using timestamps and cryptographic one-time passwords alongside an animated QR code displayed on a client, and a scanner and server capable of verifying those animated codes in realtime.
+
+
+
+\end{document}
