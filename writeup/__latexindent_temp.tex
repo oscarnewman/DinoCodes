@@ -5,8 +5,11 @@
 \usepackage{epsfig}
 \usepackage{graphicx}
 \usepackage{amsmath}
+\usepackage{microtype}
 \usepackage{amssymb}
-\usepackage{url} 
+
+
+
 
 % Include other packages here, before hyperref.
 
@@ -70,21 +73,89 @@ Ivan Daniluk, a developer from Spain, developed a system of transmitting large p
 
 \subsection{The Protocol}
 
-The protocol we designed encodes, every 10th of a second, three pieces of data totaling 24 bytes into a QR code. First, it encodes a universal resource ID (a 16 bit UUID). This is constant, and allows the verification server to identify a particular resource, such as a ticket or task to be copmleted, relevant to the applied domain. The second part is the last four bytes of the current Unix time in milliseconds. This is the most that is needed to verify codes are generated in realtime because of the third part, which is a Temporary One Time Password.
+\begin{figure}[t]
+   \begin{center}
+      \includegraphics[width=\linewidth]{protoc.eps}
+   \end{center}
+      \caption{The basic layout of the protcol. TOTP and timestamp are variable with time, while Resource ID is static.}
+   \label{fig:protocol}
+   \end{figure}
+
+The protocol we designed encodes, every 10th of a second, three pieces of data totaling 24 bytes into a QR code, seen in Figure \ref{fig:protocol}. Each piece of data is concatenated for into one long integer to be encoded numerically in the code—the most compact encoding QR codes support. First, it encodes a universal resource ID (a 16 bit UUID). This is constant, and allows the verification server to identify a particular resource, such as a ticket or task to be completed, relevant to the applied domain. The second part is the last four bytes of the current Unix time in milliseconds. This is the most that is needed to verify codes are generated in realtime because of the third part, which is a Time-Based One-Time Password (TOTP).\footnote{\href{https://en.wikipedia.org/wiki/Time-based_One-time_Password_algorithm}{An algorithm} which provides a unique six-digit code every 30 seconds based on a shared initial secret between a client and server}.
+
+In this protocol, the Resource ID provides a similar function to any existing QR Code—identifying a resource that is being scanned and taking some action based upon its state. We use a universally unique UUID here such that a centeralized service could respond to a wide variety of disparate use-cases and client requests.
+
+The current timestamp in milliseconds provides a guarantee that the code being scanned is being generated in realtime. This means that codes cannot be shared, printed, screenshotted, or even recorded for later use.
+
+Finally, the one time password verifies client identity. A device generating a QR Code will securely store a unique salt for the TOTP shared only with the server. This means that even if someone knew a resource ID and the QR generation protocol, without the client's salt they could not recreate a valid code.
 
 \subsection{Encoding \& Decoding}
 
-\subsection{Scanning}
+\subsection{Detection}
+
+Our scanning and detection step runs on Python and OpenCV bindings. It is a relatively naive scanner compared to those found in modern smartphones, but effective for our use cases (except for its speed). It first adaptively thresholds the image, assigning each pixel to either a 1-bit black or white value, based on average and local brightnesses of the image. As opposed to traditional thresholding where you specificy a specific cutoff, this is far more robust in different lighting conditions.
+
+Next, the detector iterates through the image searching for the characteristic "finder" patterns on a QR code (the large concentric squares at the top and left-most outer corners). These patterns exhibit a consistent black:white ratio of 1:1:3:1:1, no matter what direction they are scanned from. Given this, the detector iterates through each horizontal row and identifies possible finder patterns. For each pattern it identifies, it iteratively re-checks the horizontal and vertical axes for the same ratio pattern while re-calculating the likely center of the pattern. 
+
+Once three patterns are identified, it estimates the fourth corner and builds a bounding box. It then uses an OpenCV warp transform to crop the image exactly to the QR Code itself, represented as a bit-matrix and ready to be passed to the decoder.
+
+The major limitation of our current implementation is speed. It takes roughly a second to process a 720p frame on a modern 8-core laptop processer. It also currently only works for upright QR Codes.
 
 \subsection{Client and Server}
 
+Becuase a Python-based scanning and decoding pipelien was far too slow for the realtime application our protocol required, we built a separate proof-of-concept generator, backend validation server, and mock scanner in Javascript. The frontend, including the generator and mock scanner were built in Svelte, a reactive frontent library in Javascript, using exising NodeJS QR Code generation libraries. The backend server was built using NestJS, and encoded with a fixed set of resources to respond to after verifying the codes it was sent.
+
+
 \section{Results}
 
+\subsection{QR Generation and Scanning}
+
+\textit{Ben and Isaac, add details about decoding and encoding stuff, what works, what doesn't, is it fast or slow, etc...}
+
+\begin{figure}[t]
+   \begin{center}
+      \includegraphics[width=0.8\linewidth]{print.png}
+   \end{center}
+      \caption{Corner detection on a printed code}
+   \label{fig:print}
+\end{figure}
+
+Our scanner is promising, though not perfect. On digital images of QR Codes, like those produced by our encoder, it consistently extracts and estimates the size of the code near-perfectly, leading to a data-matrix with few errors. It even robustly identified a code's bounding box in photos of printed QR codes (Figure \ref{fig:print}).
+
+It's failure cases are numerous, though. It struggles greatly with more distorted or specular codes, such as a 3D-printed code we used in testing. Likewise, it only works on upright orientations of codes at the moment.
+
+Speed was the biggest flaw of the scanning pipeline, though. In our testing, the Python-based approach could scan a fame(exluding decoding), in an average of 1.6 seconds from a 720p MacBook Pro webcam. This is clearly far too slow not only for our realtime use, but too slow for most QR scanning to begin with. The source of this slowdown is largely from looping through each row and column of the image repeatedly in Python loops. A better implementation would drop into C++ for native OpenCV calls, or possibly use an alternate method of detection which is already optimized by OpenCV in Python, like contour detection.
+
+\subsection{Protocol and Proof-of-Concept}
+
+\begin{figure}[t]
+   \begin{center}
+      \includegraphics[width=0.8\linewidth]{gen.png}
+   \end{center}
+      \caption{The proof-of-concept generator.}
+   \label{fig:gen}
+\end{figure}
+
+
+We saw great success in the mock implemenatation of our protocol. Early tests on iOS devices using native QR-reaidng frameworks were easily able to decode 10 codes per second, if not far more.
+
+Likewise, we built the protocol into our mock client and server, deployed at \url{https://dino-demo.now.sh}, which is currently deployed live and free for anyone to test. The generator (Figure \ref{fig:gen}) and scanner (Figure \ref{fig:scan}) do not communicate other than the QR code generated, operate in realtime, and already provide robust error detection for various error cases that can be present in these codes.
+
+Quick and easy use in a live system with an actual backend server shows great promise for the protocol and it's applicability.
+
+\begin{figure}[t]
+   \begin{center}
+      \includegraphics[width=0.8\linewidth]{scan.png}
+   \end{center}
+      \caption{The proof-of-concept scanner.}
+   \label{fig:scan}
+\end{figure}
+
 \section{Comparaison to Existing Techniques}
-Contour-based detection
+
+As mentioned above, contour-based detection has been found to be a fast and efficient approach to detecting the bounding box of QR Codes. In this case, an edge-detection filter is typically applied to the image and a library like OpenCV detectects nested contours—some of which match the expected finder paterns. Some existing research has found massive speed improvements with optmized versions of this algorithm \cite{tong_qr_2014}. But in our testing, without serious optimization and further measures, this was an unreliable method to detect QR codes in moving images. Static images seemed to work fine, but the contour-based code was unable to consistently identify a QR code frame-to-frame, even though it ran in near-realtime.
 
 
-Do we need references??? Probably
 
 {\small
 \bibliographystyle{ieee_fullname}

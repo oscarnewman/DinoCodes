@@ -18,7 +18,7 @@ def run():
 
         qr = segno.make(content, error="M", micro=False)
         fn = f"out/{i}.png"
-        img = qr.save(fn, scale=10, light="#102A43", dark="#9FB3C8")
+        img = qr.save(fn, scale=10, light="#ffffff", dark="#8697AC")
 
         frame = Image.open(fn).convert("P")
         frames.append(frame)
