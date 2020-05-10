@@ -1,47 +1,28 @@
 import numpy as np
-from PIL import Image
-from itertools import permutations as make_perms
-import time
+
+from Typing import List
 
 
-# code = np.random.randint(0, 2, size=(10, 10), dtype=np.uint8) * 255
-# img = Image.fromarray(code)
-# img.show()
+class QRCode:
+    @staticmethod
+    def encode_text(text: str, ecl: QRCode.Ecc) -> QRCode:
+        pass
 
+    def __init__(self, version: int, ecl: QrCode.Ecc, datacodewords: List[int], mask: int):
+        if not (QRCode.MIN_VERSION <= version <= QRCode.MAX_VERSION):
+            raise ValueError("Version value out of range")
 
-def make_random_code(size=(10, 10)):
-    # returns random "code" as numpy array, able to be read by PIL
-    return np.random.randint(0, 2, size=(10, 10), dtype=np.uint8) * 255
+        # the version number of the QR Code, the possibel range of which
+        # is defined by MIN_VERSION and MAX_VERSION
+        self.version = version
 
+        # size of one side of the QR Code
+        self.size = version * 14 + 17
 
-def with_block_size(code, block_size=1):
-    # compute all indices of white blocks in resized code
-    white_indices_before = np.argwhere(code == 255) * block_size
-    perms = list(make_perms([i for i in range(block_size)], 2))
-    perms += [(i, i) for i in range(block_size)]
-    offsets = np.array(perms)
-    expanded = np.hstack([white_indices_before] * offsets.shape[0])
-    white_indices = (expanded + offsets.flatten()).reshape((-1, 2))
+        # error correction level
+        self.ecl = ecl
 
-    # FIXME: Slow AF. Can you index like this without for loop??
-    new_code = np.zeros([code.shape[0] * block_size] * 2, dtype=np.uint8)
-    for i in white_indices:
-        new_code[tuple(i)] = 255
-    return new_code
+        self.grid = np.zeros((self.size, self.size))
 
-
-before_make = time.time()
-code = make_random_code()
-make_time = (time.time() - before_make) * 1000
-print("MAKE TIME:", make_time)
-
-before_expand = time.time()
-expanded = with_block_size(code, block_size=100)
-expand_time = (time.time() - before_expand) * 1000
-print("EXPAND TIME:", expand_time)
-
-img = Image.fromarray(code)
-expanded_img = Image.fromarray(expanded)
-
-img.show()
-expanded_img.show()
+    MIN_VERSION = 1
+    MAX_VERSION = 4

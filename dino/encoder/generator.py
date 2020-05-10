@@ -1,3 +1,5 @@
+import numpy as np
+
 
 class QR:
     def __init__(self, content, version=None, correction_level=None, mode=None):
