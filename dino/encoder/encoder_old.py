@@ -36,7 +36,7 @@ make_time = (time.time() - before_make) * 1000
 print("MAKE TIME:", make_time)
 
 before_expand = time.time()
-expanded = with_block_size(code, block_size=100)
+expanded = with_block_size(code, block_size=10)
 expand_time = (time.time() - before_expand) * 1000
 print("EXPAND TIME:", expand_time)
 
