@@ -50,7 +50,7 @@ def locate(image: np.ndarray) -> List[np.ndarray]:
     plt.imshow(warped, cmap="gray")
     plt.show()
 
-    return points
+    return points, warped
 
 
 def fitToCode(

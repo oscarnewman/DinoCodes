@@ -9,6 +9,8 @@ from PIL import Image, ImageFilter
 from detector.detect import FinderPattern, LinearBinaryRatioSearchMachine, locate
 from detector.preprocess import preprocess
 
+from decoder.decoder import decode
+
 
 def show_webcam(mirror=False):
     cam = cv2.VideoCapture(0)
@@ -50,21 +52,32 @@ def show_webcam(mirror=False):
 
 
 def run():
-    im = Image.open("qrtests/qr1.png")
+    im = Image.open("qrtests/v1_alphanumeric.png")
     # im = Image.open("qrtests/txsm.jpg")
     # im = Image.open("qrtests/3d.jpg")
     image = np.array(im)
-    # image = cv2.imread("qrtests/v1.png")
+    image = cv2.imread("qrtests/v1_alphanumeric.png")
+
+    # apply some scaling to help with clarity reading image
+    scale_percent = 80  # percent of original size
+    width = int(image.shape[1] * scale_percent / 100)
+    height = int(image.shape[0] * scale_percent / 100)
+    dim = (width, height)
+    # resize image
+    image = cv2.resize(image, dim, interpolation=cv2.INTER_AREA)
     # print(image.shape)
     image = preprocess(image)
     # plt.imshow(image)
     # plt.show()
 
-    box = locate(image)
+    box, pts = locate(image)
     print(box)
 
     # print(centers)
-
+    if pts.shape == (21, 21):
+        msg = decode(pts)
+        if msg is not None:
+            print(f"QR Code message: {msg}")
     # points = np.array(list(map(lambda cent: np.array([cent.row, cent.col]), centers)))
 
     fig, ax = plt.subplots(1)

@@ -17,6 +17,7 @@ pillow = "*"
 pyzbar = "*"
 matplotlib = "*"
 segno = "*"
+pipfile = "*"
 
 [requires]
 python_version = "3.7"
