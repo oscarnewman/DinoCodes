@@ -1,298 +1,339 @@
-import itertools
-import re
+import numpy as np
+import random
+from itertools import permutations as make_perms
+from itertools import cycle
+from PIL import Image
+
+
+# class QRCode:
 
 
 class QRCode:
-
-    def __init__(self, version, ecl, data_codewords):
+    def __init__(self, content, version=1, correction_level=0, mask=3, mode=None):
+        self.dims = (21, 21)
         self.version = version
-        self.size = version * 4 + 17
-        self.ecl = ecl
+        self.ecl = correction_level
 
-        # the native python grid of the QR code
-        self.grid = [[False] * self.size for _ in range(self.size)]
+        self.content = content.upper()
 
-        # temporary grid marking parts of data grid which are functional (don't contain data)
-        self.is_function = [[False] * self.size for _ in range(self.size)]
+        # canvas_size =
 
-        # draw all function modules onto grid
-        self.draw_function_modules()
+        self.character_count = len(content)
 
-        # get all error codewords (using Reed-Solomon) from data codwords
-        all_codewords = self.make_all_codewords(data_codewords)
-        self.draw_codewords(all_codewords)
+        self.grid = np.zeros(self.dims)
+        self.is_functional = np.zeros(self.dims)
 
-        # apply masking
-        mask, min_penalty = -1, 1 << 32
-        for i in range(8):  # 8 different mask options
-            self.apply_mask(i)
-            self.draw_format_bits(i)
-            penalty = self.get_penalty()
-            if penalty < min_penalty:
-                mask = i
-                min_penalty = penalty
-            self.apply_mask(i)  # undo mask via XOR nature
+        self.draw_timing_patterns()
+        self.draw_position_blocks()
+        self.draw_format_bits_dummy()
 
-        self.mask = mask  # `mask` is optimal mask now
-        self.apply_mask(self.mask)  # apply the optimal mask
-        self.draw_format_bits(self.mask)  # overwrite previous format bits
+        data_cw = self.make_data_codewords()
+        all_cw = self.make_all_codewords(data_cw)
+        self.draw_codewords_zigzag(all_cw)
 
-    def draw_function_modules(self):
-        ''' Given this version, draws all function modules'''
-        # First draw "timing patterns"
-        for i in range(self.size):
-            self.set_function_module(6, i, i % 2 == 0)
-            self.set_function_module(i, 6, i % 2 == 0)
+        mask = random.randint(0, 8)
+        self.apply_mask(mask)
+        self.draw_format_bits(mask)
 
-        # Draw all corner patterns
-        self.draw_corner_pattern(3, 3)
-        self.draw_corner_pattern(self.size - 4, 3)
-        self.draw_corner_pattern(3, self.size - 4)
+        self.canvas = np.ones((self.dims[0] + 6, self.dims[1] + 6))
+        self.canvas[3:self.dims[0] + 3, 3:self.dims[1] + 3] = self.grid
 
-        # Draw alignment patterns, if any. thanks Nayuki.io for higher version
-        align_pat_pos = self.get_alignment_pattern_positions()
-        num_align_pats = len(align_pat_pos)
-        skips = ((0, 0), (0, num_align_pats - 1), (num_align_pats - 1, 0))
-        for i in range(num_align_pats):
-            for j in range(num_align_pats):
-                if (i, j) not in skips:  # Don't draw on the three finder corners
-                    self.draw_alignment_pattern(
-                        align_pat_pos[i], align_pat_pos[j])
-
-        # draw version and formatting bits onto the grid (will be changed later by mask)
-        self.draw_format_bits(0)
-        self.draw_version()
-
-    def set_function_module(self, x: int, y: int, isblack: bool) -> None:
-        '''helper for setting specific pixel to isblack color, as a function module (not data'''
-        assert type(isblack) is bool
-        self.grid[y][x] = isblack
-        self.is_function[y][x] = True
-
-    def draw_format_bits(self, mask) -> None:
-        '''draws both sets of format bits'''
-        data = self.ecl.format_bits << 3 | mask
-        rem = data
-        for _ in range(10):
-            rem = (rem << 1) ^ ((rem >> 9) * 0x537)
-        bits = (data << 10 | rem) ^ 0x5412
-
-        # Draw first format bit set
-        for i in range(0, 6):
-            self.set_function_module(8, i, get_bit(bits, i))
-            self.set_function_module(8, 7, get_bit(bits, 6))
-            self.set_function_module(8, 8, get_bit(bits, 7))
-            self.set_function_module(7, 8, get_bit(bits, 8))
-        for i in range(9, 15):
-            self.set_function_module(14 - i, 8, get_bit(bits, i))
-
-        # Draw second format bit set
-        for i in range(0, 8):
-            self.set_function_module(self.size - 1 - i, 8, get_bit(bits, i))
-        for i in range(8, 15):
-            self.set_function_module(
-                8, self.size - 15 + i, get_bit(bits, i))
-        self.set_function_module(8, self.size - 8, True)  # Always black
-
-    def _draw_corner_pattern(self, x, y) -> None:
-        '''helper for drawing corner pattern onto grid, centered at x, y'''
-        for dy in range(-4, 5):
-            for dx in range(-4, 5):
-                xx, yy = x + dx, y + dy
-                if (0 <= xx < self.size) and (0 <= yy < self.size):
-                    # Chebyshev/infinity norm
-                    self.set_function_module(
-                        xx, yy, max(abs(dx), abs(dy)) not in (2, 4))
-
-    def draw_alignment_pattern(self, x, y) -> None:
-        '''draws alignment pattern centered at x, y'''
-        for dy in range(-2, 3):
-            for dx in range(-2, 3):
-                self.set_function_module(
-                    x + dx, y + dy, max(abs(dx), abs(dy)) != 1)
-
-    @staticmethod
-    def encode_text(text):
-        '''
-        Takes in text and encodes it into a QR code.
-        '''
-
-        data_segments = QRSegment.make_segments(text)
-        return QRCode.encode_segments(data_segments)
-
-    @staticmethod
-    def encode_segments(data_segments):
-        '''
-        Returns a QRCode instance, encoding the data_segments into a format with
-        the smallest possible size but highest possible ecl.
-        '''
-        version = QRCode.MIN_VERSION
-        used, capacity = 0, 0  # for scoping issues
-        for version in range(QRCode.MIN_VERSION, QRCode.MAX_VERSION + 1):
-            capacity = QRCode.get_num_data_codewords(version, ecl) * 8
-            used = QRSegment.get_total_bits(segs, version)
-
-            if used <= capacity:
-                break  # this is our version, choosing smallest possible
-            if version >= QRCode.MAX_VERSION:
-                errmsg = "Text exceeds capacity. Segment too long"
-                raise ValueError(errmsg)
-
-        # Attempt to increase ECL while still fitting in current decided version
-        ecl = QRCode.L_ECL
-        for new_ecl in {QRCode.M_ECL, QRCode.Q_ECL, QRCode.H_ECL}:
-            if used <= QRCode.get_num_data_codewords(version, new_ecl) * 8:
-                ecl = new_ecl
-
-        # create an array of bits: all data to be encoded
-        bits = BitArray()
-        for seg in data_segments:
-
-            bits.append_bits(seg.get_mode().get_mode_bits(), 4)
-            bits.append_bits(seg.get_num_chars(),
-                             seg.get_mode().num_char_count_bits(version))
-            bits.extend(seg.data)
-            # CONSTANTS, CLASS HELPERS, ETC.
-
-        # update used capacity
-        capacity = QRCode.get_num_chars(version, ecl) * 8
-        # add terminator
-        bits.append_bits(0, min(4, capacity - len(bits)))
-        # add bit padding
-        bits.append_bits(0, -len(bits) % 8)
-        # add alternating byte padding
-        # alternating bytes per QR spec
-        for padding in itertools.cycle((0xEC, 0x11)):
-            if len(bits) >= capacity:
-                break
-            bits.append_bits(padding, 8)
-
-        # turn bit array into big endian bytes. thanks to nayuki.io
-        data_codewords = [0] * (len(bits) // 8)
-        for i, bit in enumerate(bits):
-            data_codewords[i >> 3] |= bit << (7 - (i & 7))
-
-        return QRCode(version, ecl, data_codewords)
-
-    class Ecl:
-        '''
-        Error correction level of the QR
-        '''
-
-        def __init__(self, level, format_bits):
-            self.level = level
-            self.format_bits = format_bits
-
-    L_ECL = Ecl(0, 1)  # tolerate 7% error
-    M_ECL = Ecl(1, 0)  # tolerate 15% error
-    Q_ECL = Ecl(2, 3)  # tolerate 25% error
-    H_ECL = Ecl(3, 2)  # tolerate 30% error
-
-    MIN_VERSION = 1
-    MAX_VERSION = 40
-
-    ECL_CODEWORDS_PER_BLOCK = (
-        # 0,  1,  2,  3,  4,  5,  6,  7,  8,  9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40    Error correction level
-        (-1,  7, 10, 15, 20, 26, 18, 20, 24, 30, 18, 20, 24, 26, 30, 22, 24, 28, 30, 28, 28,
-         28, 28, 30, 30, 26, 28, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30),  # Low
-        (-1, 10, 16, 26, 18, 24, 16, 18, 22, 22, 26, 30, 22, 22, 24, 24, 28, 28, 26, 26, 26, 26,
-         28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28, 28),  # Medium
-        (-1, 13, 22, 18, 26, 18, 24, 18, 22, 20, 24, 28, 26, 24, 20, 30, 24, 28, 28, 26, 30, 28,
-         30, 30, 30, 30, 28, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30),  # Quartile
-        (-1, 17, 28, 22, 16, 22, 28, 26, 26, 24, 28, 24, 28, 22, 24, 24, 30, 28, 28, 26, 28, 30, 24, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30))  # High
-
-    NUM_ERROR_CORRECTION_BLOCKS = (
-        # 0, 1, 2, 3, 4, 5, 6, 7, 8, 9,10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40    Error correction level
-        (-1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 4,  4,  4,  4,  4,  6,  6,  6,  6,  7,  8,  8,  9,
-         9, 10, 12, 12, 12, 13, 14, 15, 16, 17, 18, 19, 19, 20, 21, 22, 24, 25),  # Low
-        (-1, 1, 1, 1, 2, 2, 4, 4, 4, 5, 5,  5,  8,  9,  9, 10, 10, 11, 13, 14, 16, 17, 17,
-         18, 20, 21, 23, 25, 26, 28, 29, 31, 33, 35, 37, 38, 40, 43, 45, 47, 49),  # Medium
-        (-1, 1, 1, 2, 2, 4, 4, 6, 6, 8, 8,  8, 10, 12, 16, 12, 17, 16, 18, 21, 20, 23, 23,
-         25, 27, 29, 34, 34, 35, 38, 40, 43, 45, 48, 51, 53, 56, 59, 62, 65, 68),  # Quartile
-        (-1, 1, 1, 2, 4, 4, 4, 5, 6, 8, 8, 11, 11, 16, 16, 18, 16, 19, 21, 25, 25, 25, 34, 30, 32, 35, 37, 40, 42, 45, 48, 51, 54, 57, 60, 63, 66, 70, 74, 77, 81))  # High
-
-    MASK_PATTERNS = (
-        (lambda x, y:  (x + y) % 2),
-        (lambda x, y:  y % 2),
-        (lambda x, y:  x % 3),
-        (lambda x, y:  (x + y) % 3),
-        (lambda x, y:  (x // 3 + y // 2) % 2),
-        (lambda x, y:  x * y % 2 + x * y % 3),
-        (lambda x, y:  (x * y % 2 + x * y % 3) % 2),
-        (lambda x, y:  ((x + y) % 2 + x * y % 3) % 2),
-    )
-
-
-class QRSegment:
-    ''' Immutable segment of data in QR code '''
-
-    def __init__(self, mode, num_chars: int, data):
-        self.mode = mode
-
-        self.num_chars = num_chars
-
-        self.data = list(data)
-
-    def get_mode(self):
-        return self.mode
-
-    @staticmethod
-    def make_numeric(digits: str):
-        ''' makes segment of mode NUMERIC with given data `digits`'''
-        bits = BitArray()
+    # thanks to nayuki.io for guidance
+    def draw_codewords_zigzag(self, cw):
+        # draws all codewords `cw` in zigzag fashion
         i = 0
-        while i < len(digits):  # up to 3 digits per append
-            n = min(len(digits) - i, 3)
-            bits.append_bits(int(digits[i: i + n]), n * 3 + 1)
-            i += n
+        for r in range(self.dims[0] - 1, 0, -2):
+            if r <= 6:
+                r -= 1  # for zig
+            for v in range(self.dims[0]):
+                for j in range(2):
+                    x = r - j
+                    y = (self.dims[0] - 1 - v) if (r + 1) & 2 == 0 else v
+                    if not self.is_functional[y][x] and i < len(cw) * 8:
+                        self.grid[y, x] = 0 if bool(self.val_at(
+                            cw[i >> 3], 7 - (i & 7))) else 1
+                        i += 1
 
-        return QRSegment(QRSegment.Mode.NUMERIC, len(digits), bits)
+    def val_at(self, x, i):  # gets val of ith bit of x
+        return (x >> i) & 1 != 0
 
-    @staticmethod
-    def make_alphanumeric(text):
-        ''' makes segment of mode ALPHANUMERIC with given data `text`'''
-        # The characters allowed are: 0 to 9, A to Z (uppercase only), space,
-        # dollar, percent, asterisk, plus, hyphen, period, slash, colon.
-        bits = BitArray()
+    def apply_mask(self, mask):
+        # masks as bit coordinate lamdas
+        MASKS = [
+            (lambda y, x:  (x + y) % 2),
+            (lambda y, x:  y % 2),
+            (lambda y, x:  x % 3),
+            (lambda y, x:  (x + y) % 3),
+            (lambda y, x:  (x // 3 + y // 2) % 2),
+            (lambda y, x:  x * y % 2 + x * y % 3),
+            (lambda y, x:  (x * y % 2 + x * y % 3) % 2),
+            (lambda y, x:  ((x + y) % 2 + x * y % 3) % 2),
+        ]
+        old_type = self.grid.dtype
+        grid = self.grid.astype(np.bool)
+        mask_func = MASKS[mask]
+        for y in range(self.dims[0]):
+            for x in range(self.dims[1]):
+                grid[y, x] ^= ((mask_func(y, x) == 0) and (
+                    not self.is_functional[y, x] == 1))
+
+        self.grid = grid.astype(old_type)
+
+    def make_data_codewords(self):
+        # makes the entire bit stream given the content, including mode,
+        # character count, and terminator indicators
+
+        # MODE INDICATOR
+        stream = self.mode_ind_str()
+
+        # CHARACTER COUNT INDICATOR
+        stream += self.character_count_ind_str()
+
+        # ACTUAL DATA
+        stream += self.make_alphanumeric(self.content)
+
+        data_capacity_bits = self.data_capacity_bytes() * 8
+
+        # TERMINATOR (up to 4 0s, less than 4 only if reached capacity in < 4)
+        stream += ('0' * min(4, data_capacity_bits - len(stream)))
+
+        # BYTE PADDING
+        stream += ('0' * (-len(stream) % 8))
+
+        for byte_pad in cycle(("11101100", "00010001")):
+            if len(stream) >= data_capacity_bits:
+                break
+            stream += byte_pad
+         # bist -> bytes
+        data_code_words = [0] * (len(stream) // 8)
+        for (i, bit) in enumerate(stream):
+            data_code_words[i >> 3] |= int(bit) << (7 - (i & 7))
+
+        # RETURNS A LIST
+        return data_code_words
+
+    def draw_all_codewords_zigzag(self, cw):
+        i = 0
+        sz = self.dims[0]
+
+        for r in range(sz - 1, 0, -2):
+            if r <= 6:
+                r -= 1
+            for v in range(sz):
+                for j in range(2):
+                    x = r - j
+                    u = (r + 1) & 2 == 0
+                    y = (sz - 1 - v) if u else v
+                    if not self.is_functional[y, x] and i < len(cw) * 8:
+                        def val_at(x, i):
+                            return (x >> i) & 1 != 0
+                        self.grid[y, x] = val_at(cw[i >> 3], 7 - (i & 7))
+                        i += 1
+
+    def draw_position_blocks(self):
+        Y, X = self.dims[0], self.dims[1]
+
+        POSITION_BLOCK = np.array(
+            [[0, 0, 0, 0, 0, 0, 0],
+             [0, 1, 1, 1, 1, 1, 0],
+                [0, 1, 0, 0, 0, 1, 0],
+                [0, 1, 0, 0, 0, 1, 0],
+                [0, 1, 0, 0, 0, 1, 0],
+                [0, 1, 1, 1, 1, 1, 0],
+                [0, 0, 0, 0, 0, 0, 0]],
+            dtype=np.uint8)
+
+        top_left = np.append(np.append(POSITION_BLOCK, np.ones(
+            (7, 1)), axis=1), np.ones((1, 8)), axis=0)
+        self.grid[0:8, 0:8] = top_left
+        self.is_functional[0:8, 0:8] = 1
+
+        top_right = np.append(
+            np.append(np.ones((7, 1)), POSITION_BLOCK, axis=1), np.ones((1, 8)), axis=0)
+        self.grid[0:8, X-8:X] = top_right
+        self.is_functional[0:8, X-8:X] = 1
+
+        bottom_left = np.append(np.ones((1, 8)), np.append(POSITION_BLOCK, np.ones(
+            (7, 1)), axis=1), axis=0)
+        self.grid[Y-8:Y, 0:8] = bottom_left
+        self.is_functional[Y-8:Y, 0:8] = 1
+
+    def draw_timing_patterns(self):
+        pattern = np.tile(np.array([0, 1]),
+                          self.dims[0] // 2 + 1)[:self.dims[0]]
+        self.grid[:, 6] = pattern
+        self.is_functional[:, 6] = 1
+
+        self.grid[6, :] = pattern  # np.reshape(pattern, (1, self.dims[0]))
+        self.is_functional[6, :] = 1
+
+    def raw_total_capacity_bits(self):
+        return (16 * self.version + 128) * self.version + 64
+
+    def data_capacity_bytes(self):
+        # returns capacity for this version and this ecl
+        bits_capacity = self.raw_total_capacity_bits()
+        return bits_capacity // 8 - self.error_cw_per_block() * self.num_error_blocks()
+
+    def error_cw_per_block(self):
+        cpb = [7, 10, 13, 17]  # assuming version 1
+        return cpb[self.ecl]
+
+    def draw_format_bits(self, mask):
+        # Draws format bits given mask. credit to nayuki.io on implementation guidance
+        fbl = [1, 9, 3, 2]
+        d = fbl[self.ecl] << 3 | mask
+        r = d
+        for i in range(10):
+            r = (r << 1) ^ ((r >> 9) * 0x537)
+        bits = (d << 10 | r) ^ 0x5412
+
+        def fm(x, y, b):
+            self.grid[y, x] = 0 if b == 1 else 1
+            self.is_functional[y, x] = True
+
+        # Draw first copy
+        for i in range(0, 6):
+            fm(8, i, self.val_at(bits, i))
+        fm(8, 7, self.val_at(bits, 6))
+        fm(8, 8, self.val_at(bits, 7))
+        fm(7, 8, self.val_at(bits, 8))
+        for i in range(9, 15):
+            fm(14 - i, 8, self.val_at(bits, i))
+
+        # Draw second copy
+        for i in range(0, 8):
+            fm(self.dims[0] - 1 - i, 8, self.val_at(bits, i))
+        for i in range(8, 15):
+            fm(8, self.dims[0] - 15 + i, self.val_at(bits, i))
+        fm(8, self.dims[0] - 8, True)  # A
+
+    def num_error_blocks(self):
+        num_err_blocks = 1  # assuming version 1
+        return num_err_blocks
+
+    def draw_format_bits_dummy(self):
+        # draw horizontally
+        for x in range(self.dims[0]):
+            if x != 6 and not(9 <= x <= 12):
+                self.grid[8, x] = 1
+                self.is_functional[8, x] = 1
+
+        # draw vertically
+        for y in range(self.dims[0]):
+            if y != 6 and not (9 <= y <= 12):
+                self.grid[y, 8] = 1
+                self.is_functional[y, 8] = 1
+
+        # draw that one black dot
+        self.grid[13, 8] = 0
+        self.is_functional[13, 8] = 1
+
+    def to_bin_str(self, n, l):
+        # takes base 10 number, n, and converts to binary string with `l` bits
+        b = bin(n)[2:]
+        return ''.join(['0' if i < l-len(b) else b[i-l+len(b)] for i in range(l)])
+
+    def make_alphanumeric(self, text):
+        # does data encoding into bit stream
+        ALPHANUMERIC_ENCODING = {ch: i for (i, ch) in enumerate(
+            "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:")}
+        stream = ''
         for i in range(0, len(text) - 1, 2):  # Process groups of 2
-            temp = QRSegment.ALPHANUMERIC_ENCODING_TABLE[text[i]] * 45
-            temp += QRSegment.ALPHANUMERIC_ENCODING_TABLE[text[i + 1]]
-            bits.append_bits(temp, 11)
+            temp = ALPHANUMERIC_ENCODING[text[i]] * 45
+            temp += ALPHANUMERIC_ENCODING[text[i + 1]]
+            stream += self.to_bin_str(temp, 11)
         if len(text) % 2 > 0:  # 1 character remaining
-            bits.append_bits(
-                QRSegment.ALPHANUMERIC_ENCODING_TABLE[text[-1]], 6)
-        return QRSegment(QRSegment.Mode.ALPHANUMERIC, len(text), bits)
+            stream += self.to_bin_str(ALPHANUMERIC_ENCODING[text[-1]], 6)
+        return stream
 
-    # CONSTANTS AND HELPER CLASSES
-    NUMERIC_REGEX = re.compile(r"[0-9]*\Z")
-    ALPHANUMERIC_REGEX = re.compile(r"[A-Z0-9 $%*+./:-]*\Z")
+    def make_all_codewords(self, data_codewords):
+        # takes in a list of data codewords and applies error correction to get all codewords
+        assert len(data_codewords) == self.data_capacity_bytes()
 
-    ALPHANUMERIC_ENCODING_TABLE = {ch: i for (i, ch) in enumerate(
-        "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ $%*+-./:")}
+        cw_per_block = self.error_cw_per_block()
 
-    class Mode:
-        def __init__(self, mode_bits, char_counts):
-            self.mode_bits = mode_bits
-            self.char_counts = char_counts
+        reed_sol_divisor = self.reed_sol_divisor(cw_per_block)
+        ec_block = self.reed_sol_remainder(data_codewords, reed_sol_divisor)
+        # data_codewords += [0]
+        block = data_codewords + ec_block
 
-        def get_mode_bits(self):
-            return self.mode_bits
+        return block
+        # result = []
+        # for i in range(len(blocks[0])):
+        #     for (j, b) in enumerate(blocks):
+        #         if i != short_block_len - cw_per_block or j >= num_short_blocks:
+        #             result.append(b[i])
+        # return result
 
-        def num_char_count_bits(self, ver):
-            return self.char_counts[(ver + 7) // 17]
+    # HUGE THANKS TO NAYUKI.IO FOR REED SOLOMON MATH
+    def reed_sol_divisor(self, d):
+        res = [0] * (d - 1) + [1]  # Start off with the monomial x^0
 
-    NUMERIC_MODE = Mode(0x1, (10, 12, 14))
-    ALPHANUMERIC_MODE = Mode(0x2, (9, 11, 13))
+        root = 1
+        for i in range(d):  # Unused variable i
+            # Multiply the current product by (x - r^i)
+            for j in range(d):
+                res[j] = self.reed_sol_multiply(res[j], root)
+                if j + 1 < d:
+                    res[j] ^= res[j + 1]
+            root = self.reed_sol_multiply(root, 0x02)
+        return res
+
+    def reed_sol_remainder(self, data, div):
+        """Returns the Reed-sol error correction codeword for the given data and divisor polynomials."""
+        res = [0] * len(div)
+        for b in data:  # Polynomial division
+            f = b ^ res.pop(0)
+            res.append(0)
+            for (i, c) in enumerate(div):
+                res[i] ^= self.reed_sol_multiply(c, f)
+        return res
+
+    def reed_sol_multiply(self, a, b):
+        """Returns the product of the two given field elements modulo GF(2^8/0x11D). The arguments and result
+        are unsigned 8-bit integers. This could be implemented as a lookup table of 256*256 entries of uint8."""
+
+        r = 0
+        for i in reversed(range(8)):
+            r = (r << 1) ^ ((r >> 7) * 0x11D)
+            r ^= ((b >> i) & 1) * a
+        return r
+
+    def mode_ind_str(self):
+        return '0010'
+
+    def character_count_ind_str(self):
+        return self.to_bin_str(self.character_count, 9)
+
+    def terminator_ind_str(self):
+        return '0000'
+
+    def with_block_size(self, code, block_size=1):
+        # compute all indices of white blocks in resized code
+        white_indices_before = np.argwhere(code != 0) * block_size
+        perms = list(make_perms([i for i in range(block_size)], 2))
+        perms += [(i, i) for i in range(block_size)]
+        offsets = np.array(perms)
+        expanded = np.hstack([white_indices_before] * offsets.shape[0])
+        white_indices = (expanded + offsets.flatten()).reshape((-1, 2))
+
+        new_code = np.zeros([code.shape[0] * block_size] * 2, dtype=np.uint8)
+        for i in white_indices:
+            new_code[tuple(i)] = 255
+        return new_code
+
+    def show(self, expand_factor=10):
+        code = np.copy(self.canvas)
+        expanded = self.with_block_size(code, block_size=expand_factor)
+        img = Image.fromarray(expanded)
+        img.show()
 
 
-class BitArray(list):
-    ''' simple class for holding sequence of bits'''
-
-    def append_bits(self, v, n):
-        ''' appends n lowest order bits of the int v as binary'''
-        self.extend(((v >> i) & 1) for i in reversed(range(n)))
+def main():
+    q = QRCode('ABCDEFGHIJKLMNOPQRSTUVWXY', mask=7)
+    q.show()
 
 
-def get_bit(x: int, i: int) -> bool:
-    '''true if ith bit of x is 1'''
-    return (x >> i) & 1 != 0
+if __name__ == '__main__':
+    main()
