@@ -17,5 +17,5 @@ Go to https://dino-demo.now.sh
 ### To Run the PoC Server
 In `/poc/sample-server` run `yarn` then `yarn start`.
 
-### To run the Poc Clieint
+### To run the Poc Client
 In `/poc/sample-client` run `yarn` then `yarn start`.
