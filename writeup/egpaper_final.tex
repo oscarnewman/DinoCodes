@@ -89,7 +89,10 @@ The current timestamp in milliseconds provides a guarantee that the code being s
 
 Finally, the one time password verifies client identity. A device generating a QR Code will securely store a unique salt for the TOTP shared only with the server. This means that even if someone knew a resource ID and the QR generation protocol, without the client's salt they could not recreate a valid code.
 
-\subsection{Encoding \& Decoding}
+\subsection{Encoding}
+Our encoding portion runs natively in Python with Numpy, and the encoder in our exposed API supports \emph{Version 1} QR codes with alphanumeric encodings, in order to enable our proof-of-concept end-to-end QR Code pipeline. This particular version is capable of storing 208 bits of data, some proportion of which is reserved for Reed-Solomon codewords for detection-error resilience. In the alphanumeric encoding format, 45 characters are supported (all uppercase english letters, all digits, and an assortment of nine special characters), and are broken into 11-bit chunks – called codewords – of up to two characters. These chunks are appended to each other in order in a stream, along with prefixes carrying metadata and suffixes holding specifically formatted padding.
+
+The QR Code encoding protocol has a very specific method for reserving certain sections of the code for various kinds of metadata or position-detection patterns (for aiding the detection process), and stream of binary data itself is applied in a continuously snaking pattern throughout the data-specific (as opposed to metadata- or formatting-specific) sections of the QR code. Among many others of the complicated list of steps to the encoding protocol, one of 8 bitwise masks is XOR'd with the data of the QR code in order to reduce the frequency of large areas of white or black, which make it harder for the decoder to discern the individual bit grid from an image of the code.
 
 \subsection{Detection}
 
@@ -103,7 +106,7 @@ The major limitation of our current implementation is speed. It takes roughly a 
 
 \subsection{Client and Server}
 
-Becuase a Python-based scanning and decoding pipelien was far too slow for the realtime application our protocol required, we built a separate proof-of-concept generator, backend validation server, and mock scanner in Javascript. The frontend, including the generator and mock scanner were built in Svelte, a reactive frontent library in Javascript, using exising NodeJS QR Code generation libraries. The backend server was built using NestJS, and encoded with a fixed set of resources to respond to after verifying the codes it was sent.
+Becuase a Python-based scanning and decoding pipeline was far too slow for the realtime application our protocol required, we built a separate proof-of-concept generator, backend validation server, and mock scanner in Javascript. The frontend, including the generator and mock scanner were built in Svelte, a reactive frontent library in Javascript, using exising NodeJS QR Code generation libraries. The backend server was built using NestJS, and encoded with a fixed set of resources to respond to after verifying the codes it was sent.
 
 
 \section{Results}
@@ -122,9 +125,11 @@ Becuase a Python-based scanning and decoding pipelien was far too slow for the r
 
 Our scanner is promising, though not perfect. On digital images of QR Codes, like those produced by our encoder, it consistently extracts and estimates the size of the code near-perfectly, leading to a data-matrix with few errors. It even robustly identified a code's bounding box in photos of printed QR codes (Figure \ref{fig:print}).
 
-It's failure cases are numerous, though. It struggles greatly with more distorted or specular codes, such as a 3D-printed code we used in testing. Likewise, it only works on upright orientations of codes at the moment.
+Its failure cases are numerous, though. It struggles greatly with more distorted or specular codes, such as a 3D-printed code we used in testing. Likewise, it only works on upright orientations of codes at the moment.
 
 Speed was the biggest flaw of the scanning pipeline, though. In our testing, the Python-based approach could scan a fame(exluding decoding), in an average of 1.6 seconds from a 720p MacBook Pro webcam. This is clearly far too slow not only for our realtime use, but too slow for most QR scanning to begin with. The source of this slowdown is largely from looping through each row and column of the image repeatedly in Python loops. A better implementation would drop into C++ for native OpenCV calls, or possibly use an alternate method of detection which is already optimized by OpenCV in Python, like contour detection.
+
+Of course, our native Python implementation was much slower (and for this proof-of-concept, much less extensible) than fast C-based QR encoding libraries, but for the specific version and encoding type it supports, it appeared to work perfectly. Much guidance for the Python implementation of encoding came from (nayuki.io [6])
 
 We built a rudementary decoder to test with the scanning pipeline, and while it is fast, the complex masking and data encoding of QR codes made this part quite difficult. This decoder takes in an array of bits from the scanner and decodes the message in the QR code. We limited the scope of the decoder to QR codes with shape 21 x 21 and alphanumeric encoding. We were able to successfuly unmask the QR codes and extract the binary data from them, but we had trouble successfully decoding this stream of data that we extracted. 
 
@@ -153,7 +158,7 @@ Quick and easy use in a live system with an actual backend server shows great pr
    \label{fig:scan}
 \end{figure}
 
-\section{Comparaison to Existing Techniques}
+\section{Comparison to Existing Techniques}
 
 As mentioned above, contour-based detection has been found to be a fast and efficient approach to detecting the bounding box of QR Codes. In this case, an edge-detection filter is typically applied to the image and a library like OpenCV detectects nested contours—some of which match the expected finder paterns. Some existing research has found massive speed improvements with optmized versions of this algorithm \cite{tong_qr_2014}. But in our testing, without serious optimization and further measures, this was an unreliable method to detect QR codes in moving images. Static images seemed to work fine, but the contour-based code was unable to consistently identify a QR code frame-to-frame, even though it ran in near-realtime.
 
