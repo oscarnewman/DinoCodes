@@ -126,6 +126,8 @@ It's failure cases are numerous, though. It struggles greatly with more distorte
 
 Speed was the biggest flaw of the scanning pipeline, though. In our testing, the Python-based approach could scan a fame(exluding decoding), in an average of 1.6 seconds from a 720p MacBook Pro webcam. This is clearly far too slow not only for our realtime use, but too slow for most QR scanning to begin with. The source of this slowdown is largely from looping through each row and column of the image repeatedly in Python loops. A better implementation would drop into C++ for native OpenCV calls, or possibly use an alternate method of detection which is already optimized by OpenCV in Python, like contour detection.
 
+We built a rudementary decoder to test with the scanning pipeline, and while it is fast, the complex masking and data encoding of QR codes made this part quite difficult. This decoder takes in an array of bits from the scanner and decodes the message in the QR code. We limited the scope of the decoder to QR codes with shape 21 x 21 and alphanumeric encoding. We were able to successfuly unmask the QR codes and extract the binary data from them, but we had trouble successfully decoding this stream of data that we extracted. 
+
 \subsection{Protocol and Proof-of-Concept}
 
 \begin{figure}[t]
