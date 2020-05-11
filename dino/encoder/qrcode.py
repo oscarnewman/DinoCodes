@@ -323,16 +323,24 @@ class QRCode:
             new_code[tuple(i)] = 255
         return new_code
 
-    def show(self, expand_factor=10):
+    def to_pil_img(self, expand_factor=10):
         code = np.copy(self.canvas)
         expanded = self.with_block_size(code, block_size=expand_factor)
-        img = Image.fromarray(expanded)
+        return Image.fromarray(expanded)
+
+    def show(self, expand_factor=10):
+        img = self.to_pil_img(expand_factor=expand_factor)
         img.show()
+
+    def to_file(self, out_path='tmpqr.png'):
+        img = self.to_pil_img()
+        img.save(out_path)
+        return out_path
 
 
 def main():
     q = QRCode('ABCDEFGHIJKLMNOPQRSTUVWXY', mask=7)
-    q.show()
+    q.to_file()
 
 
 if __name__ == '__main__':
